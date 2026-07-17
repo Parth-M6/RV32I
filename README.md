@@ -71,7 +71,6 @@ These require functionality that is intentionally outside the scope of this sing
 rtl/        Processor RTL
 tb/         Testbenches
 scripts/    Build and regression scripts
-mytests/    Custom assembly tests
 ```
 
 ---
