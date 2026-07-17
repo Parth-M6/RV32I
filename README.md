@@ -76,25 +76,10 @@ mytests/    Custom assembly tests
 
 ---
 
-## Running a single test
-
-```bash
-python scripts/run.py mytests/add.S
-```
-
-or
-
 ```bash
 python scripts/run.py riscv-tests/isa/rv32ui/add.S
 ```
 
----
-
-## Running regression
-
-```bash
-python scripts/regress.py official
-```
 
 ---
 
