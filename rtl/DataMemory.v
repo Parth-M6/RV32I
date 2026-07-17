@@ -1,6 +1,4 @@
-module DataMemory #(
-    parameter [31:0] DEPTH = 256
-) (
+module DataMemory #(parameter [31:0] DEPTH = 1024) (
     input clk,
     input we,
     input MemRead,
@@ -14,16 +12,18 @@ module DataMemory #(
     wire [1:0] byte_offset = address[1:0];
     wire [29:0] word_idx = address[31:2];
 
-    //Initialize memory to 0 to avoid X propagation during simulation
+    //Initialize memory from the same hex image as InstructionMemory
+    //This is required so that the .data section (e.g. riscv-tests tdat bytes) is present at the correct word addresses when load instructions execute.
+    //Remaining words beyond the hex file are implicitly 0 (in verilog)
     integer i;
     initial begin
-        for (i = 0; i < DEPTH; i = i + 1) begin
-            memory[i] = 32'd0;
-        end
+        for (i = 0; i < DEPTH; i = i + 1)
+            memory[i] = 32'd0; //clear first (catches X propagation)
+        $readmemh("instructions.hex", memory);
     end
 
     //Simulation assertions
-    always @(*) begin
+    always @(posedge clk) begin
         //Check alignment on read/write accesses when memory is being accessed
         if (we || MemRead) begin
             //Word access check (LW, SW)
@@ -66,7 +66,7 @@ module DataMemory #(
         end
     end
 
-    //Continuous assignment for loads
+    //Continuous assignment for loads (self explanatory)
     wire [31:0] raw_word = (word_idx < DEPTH) ? memory[word_idx] : 32'hxxxxxxxx;
 
     wire [31:0] lb_val = (byte_offset == 2'b00) ? {{24{raw_word[7]}}, raw_word[7:0]} :

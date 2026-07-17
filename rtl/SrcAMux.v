@@ -4,7 +4,9 @@ module SrcAMux(
     input UsePC,
     output reg [31:0] SrcA
 );
+
     always @(*) begin
         SrcA = UsePC ? PC : rd1;
     end
+    
 endmodule

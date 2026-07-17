@@ -6,6 +6,7 @@ module WriteBackMux(
     input [1:0] WriteBackSelect,
     output reg [31:0] Result
 );
+
     always @(*) begin
         case (WriteBackSelect)
             2'b00: Result = ALUResult;
@@ -15,6 +16,7 @@ module WriteBackMux(
             default: Result = ALUResult;
         endcase
     end
+    
 endmodule
 
 

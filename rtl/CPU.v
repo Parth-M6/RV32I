@@ -3,16 +3,16 @@ module CPU(
     input reset
 );
 
-        //Program Counter signals
+        //Program Counter 
         wire [31:0] pc;
         wire [31:0] pc_next;
         wire [31:0] pc_plus_4;
         wire [31:0] pc_plus_imm;
 
-        //Instruction Memory signals
+        //Instruction Memory 
         wire [31:0] instruction;
 
-        //Instruction Decoder Signals
+        //Instruction Decoder 
         wire [6:0] opcode;
         wire [2:0] funct3;
         wire [6:0] funct7;
@@ -20,7 +20,7 @@ module CPU(
         wire [4:0] rs1;
         wire [4:0] rs2;
 
-        //Control Unit outputs
+        //Control Unit 
         wire RegWrite;
         wire MemWrite;
         wire MemRead;
@@ -33,18 +33,18 @@ module CPU(
         wire [2:0] ImmSrc;
         wire UsePC;
 
-        //Register File signals
+        //Register File 
         wire [31:0] rd1;
         wire [31:0] rd2;
         wire [31:0] wd3;
 
-        //Immediate Generator signal
+        //Immediate Generator
         wire [31:0] imm;
 
-        //Branch Comparator signals
+        //Branch Comparator 
         wire branch_condition;
         wire BranchTaken;
-        //ALU signals
+        //ALU 
         wire [31:0] SrcA;
         wire [31:0] SrcB;
         wire [3:0] ALUControl;
@@ -147,7 +147,7 @@ module CPU(
             .BranchTaken(branch_condition)
         );
 
-        // A branch can only be taken if the instruction is actually a branch
+        //Branch taken iff instruction is branch
         assign BranchTaken = Branch && branch_condition;
 
         //SrcAMux

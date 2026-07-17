@@ -8,6 +8,7 @@ module PCMux(
     input BranchTaken,
     output reg [31:0] pc_next
 );
+
     always @(*) begin
         if (Jalr) begin
             pc_next = alu_result & ~32'b1;
@@ -17,4 +18,5 @@ module PCMux(
             pc_next = pc_plus_4;
         end
     end
+
 endmodule
