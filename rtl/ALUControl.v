@@ -1,7 +1,7 @@
 module ALUControl(
     input  [1:0] ALUOp,
     input  [2:0] funct3,
-    input  [6:0] funct7,   //instruction[31:25]
+    input  [6:0] funct7,   
     input  [6:0] opcode,
     output reg [3:0] ALUControl
 );
@@ -92,7 +92,7 @@ module ALUControl(
                     //AND
                     {OPCODE_OP, 3'b111, 7'b0000000}: ALUControl = ALU_AND;
 
-                    //Illegal encoding
+                    //Illegal code
                     default: ALUControl = 4'bxxxx;
                 endcase
             end

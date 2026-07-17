@@ -35,7 +35,7 @@ module ALU(
             SRL:  ALUResult = SrcA >> SrcB[4:0];
             SRA:  ALUResult = $signed(SrcA) >>> SrcB[4:0];
             SLTU: ALUResult = (SrcA < SrcB) ? 32'd1 : 32'd0;
-            default: ALUResult = 32'hxxxxxxxx; //Expose bugs immediately
+            default: ALUResult = 32'hxxxxxxxx; //Bugs caught rightaway
         endcase
     end
 endmodule

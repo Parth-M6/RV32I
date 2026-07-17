@@ -1,10 +1,13 @@
-module InstructionMemory (input [31:0] address,
-                          output [31:0] instruction);
-    reg [31:0] memory[0:4095];
+module InstructionMemory #(parameter MEM_SIZE = 4096, parameter FILENAME = "instructions.hex")(
+    input [31:0] address,
+    output [31:0] instruction
+);
+
+    reg [31:0] memory [0:MEM_SIZE-1];
 
     initial begin
-        $readmemh("C:/Users/Parth/Desktop/RISC-V/rtl/instructions.hex", memory); 
+        $readmemh(FILENAME, memory); //File locations for automated tests and my custom tests are different
     end
 
-    assign instruction = (address[31:2] < 4096) ? memory[address[31:2]] : 32'bx;
+    assign instruction = (address[31:2] <= 1023) ? memory[address[31:2]] : 32'bx;
 endmodule

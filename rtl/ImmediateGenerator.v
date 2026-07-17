@@ -1,5 +1,8 @@
-module ImmediateGenerator(input [31:0] instruction, input [2:0] ImmSrc,
-                          output reg [31:0] imm);
+module ImmediateGenerator(
+    input [31:0] instruction,
+    input [2:0] ImmSrc,
+    output reg [31:0] imm
+);
 
     always @(*) begin
         case (ImmSrc)

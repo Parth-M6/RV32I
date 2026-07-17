@@ -1,15 +1,18 @@
-module MainControl(input [6:0] opcode,
-                   output reg RegWrite,
-                   output reg MemWrite,
-                   output reg MemRead,
-                   output reg ALUSrc,
-                   output reg Branch,
-                   output reg Jal,
-                   output reg Jalr,
-                   output reg [1:0] WriteBackSelect,
-                   output reg [1:0] ALUOp,
-                   output reg [2:0] ImmSrc,
-                   output reg UsePC);
+module MainControl(
+    input [6:0] opcode,
+    output reg RegWrite,
+    output reg MemWrite,
+    output reg MemRead,
+    output reg ALUSrc,
+    output reg Branch,
+    output reg Jal,
+    output reg Jalr,
+    output reg [1:0] WriteBackSelect,
+    output reg [1:0] ALUOp,
+    output reg [2:0] ImmSrc,
+    output reg UsePC
+);
+
     always @(*) begin
         //Default values to prevent latches
         RegWrite        = 1'b0;
@@ -37,7 +40,7 @@ module MainControl(input [6:0] opcode,
                 ALUOp           = 2'b10; //Decode funct3/funct7
                 ImmSrc          = 3'b000; //I-type
             end
-            7'b0000011: begin //Load (I-type)
+            7'b0000011: begin //Load
                 RegWrite        = 1'b1;
                 MemRead         = 1'b1;
                 ALUSrc          = 1'b1;
@@ -45,18 +48,18 @@ module MainControl(input [6:0] opcode,
                 ALUOp           = 2'b00; //ADD
                 ImmSrc          = 3'b000; //I-type
             end
-            7'b0100011: begin //Store (S-type)
+            7'b0100011: begin //Store
                 MemWrite        = 1'b1;
                 ALUSrc          = 1'b1;
                 ALUOp           = 2'b00; //ADD
                 ImmSrc          = 3'b001; //S-type
             end
-            7'b1100011: begin //Branch (B-type)
+            7'b1100011: begin //Branch
                 Branch          = 1'b1;
                 ALUOp           = 2'b01; //SUB (used by legacy ALU approach, though handled by BranchComparator now)
                 ImmSrc          = 3'b010; //B-type
             end
-            7'b1101111: begin //JAL (J-type)
+            7'b1101111: begin //JAL
                 RegWrite        = 1'b1;
                 Jal             = 1'b1;
                 WriteBackSelect = 2'b10; //PC + 4
@@ -83,9 +86,7 @@ module MainControl(input [6:0] opcode,
                 ImmSrc          = 3'b011; //U-type
                 UsePC           = 1'b1; //Use PC for SrcA
             end
-            default: begin
-                //All defaults already set at top of always block
-            end
+            //default redudndant as its already setup above
         endcase
     end
 endmodule

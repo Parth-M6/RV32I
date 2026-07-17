@@ -1,0 +1,26 @@
+# Build
+build/
+logs/
+waves/
+sim/
+
+# Generated memory image
+rtl/instructions.hex
+
+# GTKWave
+*.vcd
+
+# Python
+__pycache__/
+*.pyc
+
+# VSCode
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Official tests
+riscv-tests/
+
