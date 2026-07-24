@@ -1,15 +1,15 @@
 # RV32I Single-Cycle Processor
 
-A synthesizable single-cycle RV32I processor written in Verilog.
+A synthesizable 5-Stage RV32I processor written in Verilog.
 
-This project was developed as part of my computer architecture learning and verification journey. The core executes the RV32I base integer instruction set and is verified using directed tests together with the official RISC-V architectural test suite.
+This project was developed as part of my computer architecture learning and verification journey. The core executes the RV32I base integer instruction set and is verified using directed tests together with the official RISC-V test suite.
 
 ---
 
 ## Features
 
 - RV32I base ISA
-- Single-cycle datapath
+- 5 staged pipelined datapath
 - Harvard architecture
 - Byte-addressable data memory
 - Immediate generator
@@ -18,6 +18,7 @@ This project was developed as part of my computer architecture learning and veri
 - Register file
 - ALU with RV32I operations
 - Modular RTL
+- Hazard Unit
 
 ---
 
@@ -52,7 +53,7 @@ Currently excluded:
 - `ma_data`
 - `ld_st`
 
-These require functionality that is intentionally outside the scope of this single-cycle implementation.
+These require functionality that is intentionally outside the scope of this implementation.
 
 ---
 
@@ -69,14 +70,15 @@ These require functionality that is intentionally outside the scope of this sing
 
 ```
 rtl/        Processor RTL
-tb/         Testbenches
-scripts/    Build and regression scripts
+tb_custom/  Directed Testbench designed by me
+tb/         Testbench for running official RV32UI tests
+scripts/    Build and regression python scripts
 ```
 
 ---
 
 ```bash
-python scripts/run.py riscv-tests/isa/rv32ui/add.S
+python scripts/run.py riscv-tests/isa/rv32ui/<test_name>.S
 ```
 
 
@@ -87,7 +89,7 @@ python scripts/run.py riscv-tests/isa/rv32ui/add.S
 | Feature | Status |
 |----------|--------|
 | RV32I Core | ✔ |
-| Single Cycle | ✔ |
+| 5 Stage Pipelined Datapath | ✔ |
 | Directed Tests | ✔ |
 | Official ISA Tests | ✔ (except excluded tests) |
 | Synthesizable RTL | ✔ |
@@ -96,9 +98,6 @@ python scripts/run.py riscv-tests/isa/rv32ui/add.S
 
 ## Future Work
 
-- Five-stage pipelined implementation
-- Forwarding
-- Hazard detection
 - Branch prediction
 - Performance counters
 - FPGA implementation
