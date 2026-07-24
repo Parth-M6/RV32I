@@ -44,15 +44,20 @@ module RegisterFile(
         //Read Port 1
         if (a1 == 5'd0) begin
             rd1 = 32'd0; //x0 is always 0
+        end else if (we && (a1 == a3)) begin
+            rd1 = wd3; //Write-first bypass
         end else begin
-            rd1 = registers[a1]; //Read old data
+            rd1 = registers[a1];
         end
 
         //Read Port 2
         if (a2 == 5'd0) begin
             rd2 = 32'd0; //x0 is always 0
+        end else if (we && (a2 == a3)) begin
+            rd2 = wd3; //Write-first bypass
         end else begin
-            rd2 = registers[a2]; //Read old data
+            rd2 = registers[a2];
         end
     end
+
 endmodule

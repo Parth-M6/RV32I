@@ -23,16 +23,16 @@ module tb_cpu_official;
         forever #5 clk = ~clk;
         $display(
             "PC=%08h instr=%08h opcode=%02h pc4=%08h pcimm=%08h next=%08h Br=%b Jal=%b Jalr=%b Taken=%b",
-            dut.pc,
-            dut.instruction,
-            dut.opcode,
-            dut.pc_plus_4,
-            dut.pc_plus_imm,
-            dut.pc_next,
-            dut.Branch,
-            dut.Jal,
-            dut.Jalr,
-            dut.BranchTaken
+            dut.if_pc,
+            dut.if_instruction,
+            dut.id_opcode,
+            dut.if_pc_plus_4,
+            dut.ex_pc_plus_imm,
+            dut.if_pc_next,
+            dut.ex_Branch,
+            dut.ex_Jal,
+            dut.ex_Jalr,
+            dut.ex_BranchTaken_wire
         );
     end
 
@@ -56,24 +56,24 @@ module tb_cpu_official;
             $display(
                 "TIME=%0t PC=%08h INSTR=%08h",
                 $time,
-                dut.pc,
-                dut.instruction
+                dut.wb_pc,
+                dut.wb_instruction
             );
 
             $display(
                 "addr=%h offset=%0d raw_word=%h lb_val=%h",
-                dut.ALUResult,
-                dut.ALUResult[1:0],
+                dut.ex_ALUResult,
+                dut.ex_ALUResult[1:0],
                 dut.data_memory.raw_word,
                 dut.data_memory.lb_val
             );
 
             $display(
                 "opcode=%02h Branch=%b Taken=%b NextPC=%08h",
-                dut.opcode,
-                dut.Branch,
-                dut.BranchTaken,
-                dut.pc_next
+                dut.id_opcode,
+                dut.ex_Branch,
+                dut.ex_BranchTaken_wire,
+                dut.if_pc_next
             );
 
             $display("------------------------------");
@@ -120,7 +120,7 @@ module tb_cpu_official;
 
         //Entire ISA test finished
         //riscv-tests convention: a0=0 means PASS, a0!=0 (=failing gp) means FAIL
-        if (dut.instruction === 32'h00000073) begin //ecall
+        if (dut.wb_instruction === 32'h00000073) begin //ecall
             if (dut.register_file.registers[10] == 0) begin //a0 == 0 means PASS
                 if (last_test != 0)
                     $display("[PASS] Test %0d", last_test);
@@ -139,7 +139,7 @@ module tb_cpu_official;
             $finish;
         end
 
-        if (cycles > 100000) begin
+        if (cycles > 500000) begin
             $display("\n========================================");
             $display("        RV32I TEST FAILED");
             $display("========================================");
