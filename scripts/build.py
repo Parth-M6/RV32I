@@ -36,6 +36,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+# Ensure sibling scripts are importable when invoked as `python scripts/build.py`
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
 import _common as c
 
 

@@ -9,5 +9,5 @@ module InstructionMemory #(parameter MEM_SIZE = 4096, parameter FILENAME = "inst
         $readmemh(FILENAME, memory); //File locations for automated official tests and my own directed tests are different
     end
 
-    assign instruction = (address[31:2] <= 1023) ? memory[address[31:2]] : 32'bx;
+    assign instruction = (address[31:2] <= MEM_SIZE-1) ? memory[address[31:2]] : 32'bx;
 endmodule

@@ -33,6 +33,8 @@ module ID_EX(
     input [31:0] id_rd2,
     input [31:0] id_imm,
     input [31:0] id_pc_plus_4,
+    input id_pred_taken,
+    input [31:0] id_pred_target,
     
     input [4:0] id_rs1,
     input [4:0] id_rs2,
@@ -47,6 +49,8 @@ module ID_EX(
     output reg [31:0] ex_rd2,
     output reg [31:0] ex_imm,
     output reg [31:0] ex_pc_plus_4,
+    output reg ex_pred_taken,
+    output reg [31:0] ex_pred_target,
     
     output reg [4:0] ex_rs1,
     output reg [4:0] ex_rs2,
@@ -75,6 +79,8 @@ module ID_EX(
             ex_rd2 <= 32'b0;
             ex_imm <= 32'b0;
             ex_pc_plus_4 <= 32'b0;
+            ex_pred_taken <= 1'b0;
+            ex_pred_target <= 32'b0;
             
             ex_rs1 <= 5'b0;
             ex_rs2 <= 5'b0;
@@ -100,6 +106,8 @@ module ID_EX(
             ex_rd2 <= id_rd2;
             ex_imm <= id_imm;
             ex_pc_plus_4 <= id_pc_plus_4;
+            ex_pred_taken <= id_pred_taken;
+            ex_pred_target <= id_pred_target;
             
             ex_rs1 <= id_rs1;
             ex_rs2 <= id_rs2;
