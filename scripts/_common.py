@@ -2,6 +2,12 @@
 """
 _common.py - shared helpers for the RV32I build/test toolchain.
 
+New: find_verilog_sources() accepts an optional `tb_name` argument
+(e.g. "tb_cpu_official" or "tb_cpu_custom") so only that one testbench
+file is compiled.  When tb/ held a single file this was not needed; now
+that both testbenches live under tb/ we must select exactly one to avoid
+a duplicate-module iverilog error.
+
 Imported by build.py, run.py and regress.py. Not meant to be run directly.
 
 Design goals:
@@ -126,13 +132,33 @@ def tb_dir(root: Path) -> Path:
     return root / "tb"
 
 
-def find_verilog_sources(root: Path) -> List[Path]:
-    """All RTL + testbench sources, in a stable, deterministic order."""
+def find_verilog_sources(root: Path, tb_name: str = "tb_cpu_official") -> List[Path]:
+    """All RTL + testbench sources, in a stable, deterministic order.
+
+    `tb_name` selects which top-level testbench to compile (file stem,
+    without the .v suffix).  Only the matching file from tb/ is included;
+    this prevents duplicate-module errors when multiple testbench files
+    coexist in the same directory.
+    """
     sources: List[Path] = []
-    for d in (rtl_dir(root), tb_dir(root)):
-        if d.exists():
-            sources.extend(sorted(d.glob("*.v")))
-            sources.extend(sorted(d.glob("*.sv")))
+
+    # All RTL files
+    rtl = rtl_dir(root)
+    if rtl.exists():
+        sources.extend(sorted(rtl.glob("*.v")))
+        sources.extend(sorted(rtl.glob("*.sv")))
+
+    # Only the requested testbench
+    tb = tb_dir(root)
+    if tb.exists():
+        tb_file = tb / f"{tb_name}.v"
+        if tb_file.exists():
+            sources.append(tb_file)
+        else:
+            # Fall back: accept any .v/.sv in tb/ (legacy single-file layout)
+            sources.extend(sorted(tb.glob("*.v")))
+            sources.extend(sorted(tb.glob("*.sv")))
+
     if not sources:
         raise RuntimeError(
             f"No .v/.sv files found under {rtl_dir(root)} or {tb_dir(root)}"
@@ -232,7 +258,9 @@ def parse_sim_result(log_text: str):
         last_gp = fails[-1][0]
         return "FAIL", f"gp(x3)={last_gp}"
 
-    if "PROGRAM TERMINATED" in log_text or "RV32I TEST PASSED" in log_text:
+    if ("PROGRAM TERMINATED" in log_text
+            or "RV32I TEST PASSED" in log_text
+            or "DIRECTED TESTS PASSED" in log_text):
         return "PASS", ""
 
     return "ERROR", "no PASS/FAIL/TIMEOUT marker found in simulation output"

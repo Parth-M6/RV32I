@@ -1,4 +1,4 @@
-module DataMemory #(parameter [31:0] DEPTH = 1024) (
+module DataMemory #(parameter [31:0] DEPTH = 4096) (
     input clk,
     input we,
     input MemRead,
@@ -13,8 +13,6 @@ module DataMemory #(parameter [31:0] DEPTH = 1024) (
     wire [29:0] word_idx = address[31:2];
 
     //Initialize memory from the same hex image as InstructionMemory
-    //This is required so that the .data section (e.g. riscv-tests tdat bytes) is present at the correct word addresses when load instructions execute.
-    //Remaining words beyond the hex file are implicitly 0 (in verilog)
     integer i;
     initial begin
         for (i = 0; i < DEPTH; i = i + 1)

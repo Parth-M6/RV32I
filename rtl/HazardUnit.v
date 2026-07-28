@@ -9,10 +9,7 @@ module HazardUnit(
     input [4:0] mem_rd,
     input wb_RegWrite,
     input [4:0] wb_rd,
-    input BranchTaken, 
-    input Jal,         
-    input Jalr,        
-    //Branch Taken,Jal and Jalr are from EX
+    input Misprediction, //from EX: predicted outcome/target didn't match actual
 
     output reg [1:0] ForwardAE,
     output reg [1:0] ForwardBE,
@@ -48,7 +45,7 @@ module HazardUnit(
     
     //Control Hazards
     wire PCSRC;
-    assign PCSRC = BranchTaken || Jal || Jalr;
+    assign PCSRC = Misprediction;
     
     always @(*) begin
         StallF = lwStall;

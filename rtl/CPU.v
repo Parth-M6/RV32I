@@ -6,7 +6,6 @@ module CPU(
 );
 
     //Hazard Unit Wires
-    
     wire StallF;
     wire StallD;
     wire FlushD;
@@ -27,14 +26,32 @@ module CPU(
     wire [31:0] ex_pc_plus_imm;
     wire [31:0] ex_ALUResult;
 
+    //Branch predictor. looks up the address currently being fetched and speculatively redirects the fetch stream. Trained from the EX stage once the real outcome of a branch/JAL/JALR is known.
+    wire if_pred_taken;
+    wire [31:0] if_pred_target;
+    wire ex_is_control;
+    wire ex_actual_taken;
+    wire [31:0] ex_correction_target;
+    wire ex_Misprediction;
+
+    BranchPredictor branch_predictor (
+        .clk(clk),
+        .reset(reset),
+        .lookup_pc(if_pc),
+        .predict_taken(if_pred_taken),
+        .predict_target(if_pred_target),
+        .update_en(ex_is_control),
+        .update_pc(ex_pc),
+        .actual_taken(ex_actual_taken),
+        .actual_target(ex_correction_target) //only meaningful/used by BTB when actual_taken=1
+    );
+
     PCMux pc_mux (
         .pc_plus_4(if_pc_plus_4),
-        .pc_plus_imm(ex_pc_plus_imm),
-        .alu_result(ex_ALUResult),
-        .Branch(ex_Branch),
-        .Jal(ex_Jal),
-        .Jalr(ex_Jalr),
-        .BranchTaken(ex_branch_condition),
+        .predict_taken(if_pred_taken),
+        .predict_target(if_pred_target),
+        .Misprediction(ex_Misprediction),
+        .CorrectedTarget(ex_correction_target),
         .pc_next(if_pc_next)
     );
 
@@ -58,11 +75,13 @@ module CPU(
         .instruction(if_instruction)
     );
 
-    //IF/ID Pipeline Register
     
+    //IF/ID Pipeline Register
     wire [31:0] id_pc;
     wire [31:0] id_pc_plus_4;
     wire [31:0] id_instruction;
+    wire id_pred_taken;
+    wire [31:0] id_pred_target;
 
     IF_ID if_id_reg (
         .clk(clk),
@@ -72,13 +91,17 @@ module CPU(
         .if_pc(if_pc),
         .if_pc_plus_4(if_pc_plus_4),
         .if_instruction(if_instruction),
+        .if_pred_taken(if_pred_taken),
+        .if_pred_target(if_pred_target),
         .id_pc(id_pc),
         .id_pc_plus_4(id_pc_plus_4),
+        .id_pred_taken(id_pred_taken),
+        .id_pred_target(id_pred_target),
         .id_instruction(id_instruction)
     );
 
-    //ID Stage
     
+    //ID Stage
     wire [6:0] id_opcode;
     wire [2:0] id_funct3;
     wire [6:0] id_funct7;
@@ -148,8 +171,8 @@ module CPU(
         .rd2(id_rd2)
     );
 
-    //ID/EX Pipeline Register
     
+    //ID/EX Pipeline Register
     wire ex_RegWrite;
     wire ex_MemWrite;
     wire ex_MemRead;
@@ -163,6 +186,8 @@ module CPU(
     wire [31:0] ex_rd2;
     wire [31:0] ex_imm;
     wire [31:0] ex_pc_plus_4;
+    wire ex_pred_taken;
+    wire [31:0] ex_pred_target;
     wire [4:0] ex_rs1;
     wire [4:0] ex_rs2;
     wire [4:0] ex_rd;
@@ -203,6 +228,8 @@ module CPU(
         .id_rd2(id_rd2),
         .id_imm(id_imm),
         .id_pc_plus_4(id_pc_plus_4),
+        .id_pred_taken(id_pred_taken),
+        .id_pred_target(id_pred_target),
         .id_rs1(id_rs1),
         .id_rs2(id_rs2),
         .id_rd(id_rd),
@@ -216,6 +243,8 @@ module CPU(
         .ex_rd2(ex_rd2),
         .ex_imm(ex_imm),
         .ex_pc_plus_4(ex_pc_plus_4),
+        .ex_pred_taken(ex_pred_taken),
+        .ex_pred_target(ex_pred_target),
         .ex_rs1(ex_rs1),
         .ex_rs2(ex_rs2),
         .ex_rd(ex_rd),
@@ -224,8 +253,8 @@ module CPU(
         .ex_opcode(ex_opcode)
     );
 
-    //EX Stage
     
+    //EX Stage
     wire [31:0] mem_ALUResult;
     wire [31:0] ex_rd1_fwd;
     wire [31:0] ex_rd2_fwd;
@@ -286,8 +315,19 @@ module CPU(
 
     wire ex_BranchTaken_wire = ex_Branch && ex_branch_condition;
 
-    //EX/MEM Pipeline Register
+    //Real control-flow outcome for the instruction currently in EX, and comparison against what the predictor guessed when this instruction was fetched
+    wire [31:0] ex_jump_target = ex_Jalr ? (ex_ALUResult & ~32'b1) : ex_pc_plus_imm;
+
+    assign ex_is_control        = ex_Branch || ex_Jal || ex_Jalr;
+    assign ex_actual_taken      = ex_BranchTaken_wire || ex_Jal || ex_Jalr;
+    assign ex_correction_target = ex_actual_taken ? ex_jump_target : ex_pc_plus_4;
+
+    wire ex_taken_mismatch  = (ex_pred_taken != ex_actual_taken);
+    wire ex_target_mismatch = ex_pred_taken && ex_actual_taken && (ex_pred_target != ex_jump_target);
+    assign ex_Misprediction = ex_taken_mismatch || ex_target_mismatch;
+
     
+    //EX/MEM Pipeline Register
     wire mem_RegWrite;
     wire mem_MemWrite;
     wire mem_MemRead;
@@ -317,7 +357,7 @@ module CPU(
         .ex_pc(ex_pc),
         .ex_instruction(ex_instruction),
         .ex_ALUResult(ex_ALUResult),
-        .ex_rd2(ex_rd2_fwd),
+        .ex_rd2(ex_rd2_fwd), //forward data if RAW hazard
         .ex_pc_plus_4(ex_pc_plus_4),
         .ex_imm(ex_imm),
         .ex_rd(ex_rd),
@@ -333,8 +373,8 @@ module CPU(
         .mem_funct3(mem_funct3)
     );
 
-    //MEM Stage
     
+    //MEM Stage
     wire [31:0] mem_ReadData;
     
     DataMemory data_memory (
@@ -356,8 +396,8 @@ module CPU(
         .Result(mem_Result_fwd)
     );
 
-    //MEM/WB Pipeline Register
     
+    //MEM/WB Pipeline Register
     wire [1:0] wb_WriteBackSelect;
     wire [31:0] wb_ALUResult;
     wire [31:0] wb_ReadData;
@@ -391,8 +431,8 @@ module CPU(
         .wb_rd(wb_rd)
     );
 
-    //WB Stage
     
+    //WB Stage
     WriteBackMux write_back_mux (
         .ALUResult(wb_ALUResult),
         .ReadData(wb_ReadData),
@@ -402,8 +442,8 @@ module CPU(
         .Result(wb_wd3)
     );
 
-    //Hazard Unit 
     
+    //Hazard Unit
     HazardUnit hazard_unit (
         .id_rs1(id_rs1),
         .id_rs2(id_rs2),
@@ -415,9 +455,7 @@ module CPU(
         .mem_rd(mem_rd),
         .wb_RegWrite(wb_RegWrite),
         .wb_rd(wb_rd),
-        .BranchTaken(ex_BranchTaken_wire),
-        .Jal(ex_Jal),
-        .Jalr(ex_Jalr),
+        .Misprediction(ex_Misprediction),
         
         .ForwardAE(ForwardAE),
         .ForwardBE(ForwardBE),

@@ -41,6 +41,11 @@ import time
 from pathlib import Path
 from typing import List
 
+# Ensure sibling scripts are importable when invoked as `python scripts/regress.py`
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
 import _common as c
 from build import build_one
 from run import compile_rtl, run_sim
@@ -50,12 +55,20 @@ _PREFIX_RE = re.compile(r"^rv32[a-z0-9]*-[pv]-")
 
 def resolve_test_dir(root: Path, arg: str) -> Path:
     if arg == "official":
-        for cand in (root / "official", root / "build" / "riscv-tests" / "isa" / "rv32ui"):
+        # Prefer riscv-tests/isa/rv32ui/ (self-contained sources with correct
+        # relative paths to rv64ui/) over the official/ wrapper-stub directory
+        # whose #include "../rv64ui/..." paths only work inside the riscv-tests tree.
+        for cand in (
+            root / "riscv-tests" / "isa" / "rv32ui",
+            root / "official",
+            root / "build" / "riscv-tests" / "isa" / "rv32ui",
+        ):
             if cand.is_dir():
                 return cand
         raise FileNotFoundError(
             "could not find an official test directory - looked for "
-            f"{root / 'official'} and {root / 'build/riscv-tests/isa/rv32ui'}"
+            f"{root / 'riscv-tests/isa/rv32ui'}, {root / 'official'}, "
+            f"and {root / 'build/riscv-tests/isa/rv32ui'}"
         )
 
     p = Path(arg)
@@ -83,6 +96,8 @@ def main(argv=None):
     ap.add_argument("--root", help="override auto-detected project root")
     ap.add_argument("--recursive", action="store_true", help="search test_dir recursively")
     ap.add_argument("--format", choices=["words", "verilog"], default="words")
+    ap.add_argument("--tb", default="tb_cpu_official",
+                     help="testbench module to compile (default: tb_cpu_official)")
     ap.add_argument("--timeout", type=float, default=None,
                      help="python-level per-test wall clock watchdog, seconds")
     ap.add_argument("--stop-on-fail", action="store_true")
@@ -103,7 +118,7 @@ def main(argv=None):
     t_start = time.perf_counter()
 
     try:
-        vvp_path = compile_rtl(root, vvp_name="regress")
+        vvp_path = compile_rtl(root, vvp_name="regress", tb_name=args.tb)
     except c.CommandError as e:
         print(c.bad(f"RTL COMPILE FAILED:\n{e}"))
         return 1
