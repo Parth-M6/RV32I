@@ -1,4 +1,4 @@
-module DataMemory #(parameter [31:0] DEPTH = 4096) (
+module DataMemory #(parameter [31:0] DEPTH = 16384) (
     input clk,
     input we,
     input MemRead,
