@@ -8,7 +8,7 @@ module ProgramCounter(
     always @(posedge clk or posedge reset)
     begin
         if (reset)
-            pc <= 32'b0;
+            pc <= 32'h80000000; //To align with spike 
         else
             pc <= pc_next;
     end

@@ -1,4 +1,6 @@
-module CPU(
+module CPU #(
+    parameter IMEM_FILE = "instructions.hex"
+)(
     input clk,
     input reset,
     output wire [31:0] wb_instruction,
@@ -70,7 +72,9 @@ module CPU(
         .pc_plus_4(if_pc_plus_4)
     );
 
-    InstructionMemory instruction_memory (
+    InstructionMemory #(
+        .FILENAME(IMEM_FILE)
+    ) instruction_memory (
         .address(if_pc),
         .instruction(if_instruction)
     );

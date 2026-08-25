@@ -2,42 +2,52 @@
 
 A synthesizable 5-Stage pipelined RV32I processor written in Verilog.
 
-This project was developed as part of my computer architecture learning and verification journey. The core executes the RV32I base integer instruction set and is verified using directed tests together with the official RISC-V test suite.
+This project was developed as part of my computer architecture learning and verification journey. The core executes the RV32I base integer instruction set and is verified using directed tests together with the official RISC-V test suite and a
+verification stack built around differential testing against
+[Spike](https://github.com/riscv-software-src/riscv-isa-sim), the official RISC-V ISA simulator.
 
 ---
 
 ## Features
 
-- RV32I base ISA
-- 5 staged pipelined datapath
-- Harvard architecture
-- Byte-addressable data memory
-- Immediate generator
-- Branch and jump support
-- Load/store unit
-- Register file
-- ALU with RV32I operations
-- Modular RTL
-- Hazard Unit
-- Branch Prediction
+**Core datapath**
+- RV32I base ISA, 5-stage pipelined Harvard-architecture datapath
+- Byte-addressable data memory, full immediate generator, register file
+
+**Hazards & control flow**
+- Hazard detection unit: load-use stalls, EX→EX / MEM→EX forwarding
+- Dynamic branch prediction: 2-bit saturating counter + BTB, with
+  misprediction recovery (flush + redirect from EX)
+
+**Verification**
+- Directed architectural test suite (hand-written, self-checking)
+- Official `riscv-tests` RV32UI regression
+- Randomized program generation + differential testing against Spike
 
 ---
 
 ## Verification
 
-### Directed tests (`tb_cpu_custom`)
+Correctness is checked in two tiers: self-checking directed/official tests
+that assert their own outcome, and randomized differential testing that
+checks every retired instruction against Spike.
 
-A hand-written 30-subtest program in `tb/directed_tests.S` covering:
+### Layer 1: Directed & official tests
+
+`tb/directed_tests.S` is a 30-subtest, hand-written, self-checking program.
+Each subtest sets `gp` to its test number, runs a sequence, and branches to
+a fail path (writes the test number to `a0`, `ecall`s) if the result is
+wrong.
 
 | Tests | Coverage |
 |-------|----------|
 | 1–5   | ADD, SUB, overflow, LUI/AUIPC |
 | 6–12  | AND, OR, XOR, SLL, SRL, SRA, shift-immediate |
 | 13    | SLTI, SLTIU |
-| 14–16 | SW/LW, SB/LB/LBU, SH/LH/LHU |
+| 14–16 | SW/LW, SB/LB/LBU, SH/LH/LHU (sign vs. zero extension) |
 | 17–20 | BEQ, BNE, BLT/BGE, BLTU/BGEU (taken + not-taken) |
 | 21–23 | JAL, JALR, nested call + return |
-| 24–25 | Load-use hazard stall, forwarding chain |
+| 24–25 | Load-use hazard stall, forwarding chain (tested explicitly, not left to chance) |
 | 26–28 | ANDI/ORI/XORI, SLT, SLTU |
 | 29–30 | Cross-granularity load, branch loop stress |
 
@@ -45,32 +55,63 @@ A hand-written 30-subtest program in `tb/directed_tests.S` covering:
 python scripts/run.py tb/directed_tests.S --tb tb_cpu_custom
 ```
 
-`tb_cpu_custom` tracks `gp` (x3) as the sub-test number and prints `[PASS]`/`[RUN]` for each.
+`tb_cpu_custom` tracks `gp` (x3) as the sub-test number and prints
+`[PASS]`/`[RUN]` for each. It terminates on **either** the custom
+`0x00000400` sentinel (directed/random programs) **or** an `ecall` with
+`a0==0` (C/official convention), so it works with both flows.
 
-It terminates on **either** the custom `0x00000400` sentinel (directed/random programs)
-**or** an `ecall` with `a0==0` (C/official convention), so it works with both flows.
-
-
-### Official ISA tests (`tb_cpu_official`)
-
-Run a single official riscv-tests test:
+Separately, `tb_cpu_official` runs the official
+[riscv-tests](https://github.com/riscv-software-src/riscv-tests) RV32UI
+suite. The harness detects the `ecall` instruction at WB stage; `a0=0` →
+**PASS**, `a0≠0` → **FAIL** (failing sub-test number in `a0`).
 
 ```bash
 python scripts/run.py riscv-tests/isa/rv32ui/add.S
-python scripts/run.py riscv-tests/isa/rv32ui/lb.S
+python scripts/regress.py official   # full suite
 ```
 
-Run the full official regression:
+**Currently passing (37/39):** `add addi and andi auipc beq bge bgeu blt
+bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh sll slli slt slti
+sltiu sltu sra srai srl srli sub sw xor xori`
+
+**Intentionally excluded:** `fence_i` and `ma_data`. This core does not implement
+`FENCE.I` or misaligned memory access. These are scope decisions, not latent
+bugs.The implemented RV32I instruction subset is fully verified; FENCE/FENCE.I and misaligned memory access are currently outside the implementation scope.
+
+### Layer 2: Random differential testing against Spike
+
+Directed tests catch what you think to test for. Differential testing
+catches what you didn't.
+
+`scripts/gen_random.py` generates a random RV32I program (up to 10,000
+instructions, seeded for reproducibility) from a weighted instruction mix: 
+R-type/I-type arithmetic, shifts, `lui`, load/store round-trips, branches,
+and forward-only `jal`s (branch/jump targets are restricted to labels ahead
+of the current position, so branch/jump targets are constrained to avoid uncontrolled infinite loops.). The same program is run
+through both the RTL simulation and Spike (`--log-commits`).
+
+**What's actually compared:** for every retired instruction, both sides
+produce a 4-tuple: `(PC, instruction encoding, destination register,
+destination value)`. `compare.py` walks both traces in lockstep and stops
+at the first mismatch, so a failure points directly at the exact
+instruction where RTL and Spike diverged, rather than just a final,
+hard-to-debug register dump. This catches wrong values, wrong destination
+registers, missing/extra retirements, and control-flow divergence alike and
+not just the accuracy of final answer.
+
+Regression runs multiple random seeds to exercise different instruction
+mixes and dependency patterns each time, including back-to-back dependent
+chains (forwarding) and load-immediately-followed-by-use (load-use stall).
+
+Differential testing has been successfully run on randomized programs
+exceeding 10,000 instructions across multiple seeds, including programs
+designed to stress forwarding, load-use stalls, branches, and jumps.
 
 ```bash
-python scripts/regress.py official
+python scripts/gen_random.py --seed 42 --count 500 --tb tb_cpu_diff
+python scripts/gen_random.py --count 10000 --tb tb_cpu_diff
+python compare.py
 ```
-
-The harness detects the `ecall` instruction at WB stage; `a0=0` → **PASS**, `a0≠0` → **FAIL** (failing sub-test number in `a0`).
-
-Currently passing: `add addi and andi auipc beq bge bgeu blt bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh sll slli slt slti sltiu sltu sra srai srl srli sub sw xor xori`
-
-Excluded (intentionally unsupported): `fence_i` · `ma_data`
 
 ---
 
@@ -80,6 +121,7 @@ Excluded (intentionally unsupported): `fence_i` · `ma_data`
 - Icarus Verilog
 - GTKWave
 - RISC-V GNU Toolchain
+- Spike (`riscv-isa-sim`)
 
 ---
 
@@ -88,17 +130,10 @@ Excluded (intentionally unsupported): `fence_i` · `ma_data`
 ```
 rtl/          Processor RTL
 tb/           All testbenches
-scripts/      Build and regression python scripts
+scripts/      Build, generation, and regression python scripts
+diff/         Differential-testing harness (Spike compare, traces, build artifacts)
 linker.ld     Linker script for assembly tests
-directed.hex  Instruction memory for directed tests
 ```
-
----
-
-```bash
-python scripts/run.py riscv-tests/isa/rv32ui/<test_name>.S
-```
-
 
 ---
 
@@ -111,24 +146,28 @@ python scripts/run.py riscv-tests/isa/rv32ui/<test_name>.S
 | Hazard Forwarding & Stalls | ✅ |
 | Dynamic Branch Predictor (2-bit + BTB) | ✅ |
 | Directed Tests (30 subtests) | ✅ |
-| Official riscv-tests RV32UI | ✅ (37/39 - fence_i/ma_data excluded) |
+| Official riscv-tests RV32UI | ✅ (37/39, `fence_i` and `ma_data` excluded by design) |
+| Randomized RV32I Testing | ✅ |
+| Long-trace testing (>10,000 instr.) | ✅ |
 | Synthesizable RTL | ✅ |
 
 ---
 
 ## Future Work
 
-- Generate/Run programs with multiple instructions
 - Run C programs compiled with GCC
-- Spike differential testing
+- Implement the M extension (`MUL`/`DIV`)
+- Implement FENCE/FENCE.I
+- Add misaligned memory access support
 - Implement CSR instructions
-- Add performance counters
+- Add performance counters and CPI measurements
 - FPGA implementation
 
 ---
 
 ## References
 
-- Harris & Harris — *Digital Design and Computer Architecture: RISC-V Edition*
+- Harris & Harris, *Digital Design and Computer Architecture: RISC-V Edition*
 - RISC-V Unprivileged ISA Specification
 - Official RISC-V ISA Tests (https://github.com/riscv-software-src/riscv-tests)
+- Spike, the RISC-V ISA Simulator (https://github.com/riscv-software-src/riscv-isa-sim)
