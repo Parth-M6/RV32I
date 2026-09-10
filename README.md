@@ -20,7 +20,7 @@ verification stack built around differential testing against
   misprediction recovery (flush + redirect from EX)
 
 **Verification**
-- Directed architectural test suite (hand-written, self-checking)
+- Directed test suite (hand-written, self-checking)
 - Official `riscv-tests` RV32UI regression
 - Randomized program generation + differential testing against Spike
 
@@ -67,16 +67,16 @@ suite. The harness detects the `ecall` instruction at WB stage; `a0=0` →
 
 ```bash
 python scripts/run.py riscv-tests/isa/rv32ui/add.S
-python scripts/regress.py official   # full suite
+python scripts/regress.py   # full suite
 ```
 
-**Currently passing (37/39):** `add addi and andi auipc beq bge bgeu blt
-bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh sll slli slt slti
-sltiu sltu sra srai srl srli sub sw xor xori`
+**Currently passing (40/42):** `add addi and andi auipc beq bge bgeu blt
+bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh simple sll slli slt slti
+sltiu sltu sra srai srl srli st_ld sub sw xor xori`
 
 **Intentionally excluded:** `fence_i` and `ma_data`. This core does not implement
-`FENCE.I` or misaligned memory access. These are scope decisions, not latent
-bugs.The implemented RV32I instruction subset is fully verified; FENCE/FENCE.I and misaligned memory access are currently outside the implementation scope.
+`FENCE.I` or misaligned memory access yet. These are scope decisions, not latent
+bugs.The implemented RV32I instruction subset is verified; FENCE/FENCE.I and misaligned memory access are currently outside the implementation scope.
 
 ### Layer 2: Random differential testing against Spike
 
@@ -99,7 +99,7 @@ hard-to-debug register dump. This catches wrong values, wrong destination
 registers, missing/extra retirements, and control-flow divergence alike and
 not just the accuracy of final answer.
 
-Regression runs multiple random seeds to exercise different instruction
+Multiple random seeds are used to exercise different instruction
 mixes and dependency patterns each time, including back-to-back dependent
 chains (forwarding) and load-immediately-followed-by-use (load-use stall).
 
@@ -107,11 +107,19 @@ Differential testing has been successfully run on randomized programs
 exceeding 10,000 instructions across multiple seeds, including programs
 designed to stress forwarding, load-use stalls, branches, and jumps.
 
+To generate and simulate a random test:
+
 ```bash
-python scripts/gen_random.py --seed 42 --count 500 --tb tb_cpu_diff
-python scripts/gen_random.py --count 10000 --tb tb_cpu_diff
-python compare.py
+python scripts/run_diff.py --seed 53 --count 10000
 ```
+This performs the random program generation, compilation, conversion to the instruction memory format, RTL compilation, and RTL simulation.
+The Spike comparison is intentionally kept as a separate manual step. From WSL, navigate to the project directory on the Windows filesystem. Then run:
+
+```bash
+python3 diff/scripts/compare.py
+```
+
+If the executions diverge, compare.py reports the first mismatching retired instruction, making the failure directly traceable to a specific PC, instruction, register, or value.
 
 ---
 
@@ -129,9 +137,9 @@ python compare.py
 
 ```
 rtl/          Processor RTL
-tb/           All testbenches
+tb/           Testbenches for directed and official tests
 scripts/      Build, generation, and regression python scripts
-diff/         Differential-testing harness (Spike compare, traces, build artifacts)
+diff/         Differential-testing harness (Testbench, Spike compare, traces, build artifacts)
 linker.ld     Linker script for assembly tests
 ```
 
@@ -146,7 +154,7 @@ linker.ld     Linker script for assembly tests
 | Hazard Forwarding & Stalls | ✅ |
 | Dynamic Branch Predictor (2-bit + BTB) | ✅ |
 | Directed Tests (30 subtests) | ✅ |
-| Official riscv-tests RV32UI | ✅ (37/39, `fence_i` and `ma_data` excluded by design) |
+| Official riscv-tests RV32UI | ✅ (40/42, `fence_i` and `ma_data` excluded by design) |
 | Randomized RV32I Testing | ✅ |
 | Long-trace testing (>10,000 instr.) | ✅ |
 | Synthesizable RTL | ✅ |
