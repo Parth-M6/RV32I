@@ -20,7 +20,7 @@ verification stack built around differential testing against
   misprediction recovery (flush + redirect from EX)
 
 **Verification**
-- Directed test suite (hand-written, self-checking)
+- Directed architectural test suite (hand-written, self-checking)
 - Official `riscv-tests` RV32UI regression
 - Randomized program generation + differential testing against Spike
 
@@ -51,9 +51,7 @@ wrong.
 | 26–28 | ANDI/ORI/XORI, SLT, SLTU |
 | 29–30 | Cross-granularity load, branch loop stress |
 
-```bash
-python scripts/run.py tb/directed_tests.S --tb tb_cpu_custom
-```
+Compilation and simulation executed using Icarus.
 
 `tb_cpu_custom` tracks `gp` (x3) as the sub-test number and prints
 `[PASS]`/`[RUN]` for each. It terminates on **either** the custom
@@ -66,17 +64,17 @@ suite. The harness detects the `ecall` instruction at WB stage; `a0=0` →
 **PASS**, `a0≠0` → **FAIL** (failing sub-test number in `a0`).
 
 ```bash
-python scripts/run.py riscv-tests/isa/rv32ui/add.S
-python scripts/regress.py   # full suite
+python scripts/rv.py run riscv-tests/isa/rv32ui/<test_name>.S
+python scripts/rv.py regress   # full suite
 ```
 
-**Currently passing (40/42):** `add addi and andi auipc beq bge bgeu blt
-bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh simple sll slli slt slti
-sltiu sltu sra srai srl srli st_ld sub sw xor xori`
+**Currently passing (37/39):** `add addi and andi auipc beq bge bgeu blt
+bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh sll slli slt slti
+sltiu sltu sra srai srl srli sub sw xor xori`
 
 **Intentionally excluded:** `fence_i` and `ma_data`. This core does not implement
-`FENCE.I` or misaligned memory access yet. These are scope decisions, not latent
-bugs.The implemented RV32I instruction subset is verified; FENCE/FENCE.I and misaligned memory access are currently outside the implementation scope.
+`FENCE.I` or misaligned memory access. These are scope decisions, not latent
+bugs.The implemented RV32I instruction subset is fully verified; FENCE/FENCE.I and misaligned memory access are currently outside the implementation scope.
 
 ### Layer 2: Random differential testing against Spike
 
@@ -99,7 +97,7 @@ hard-to-debug register dump. This catches wrong values, wrong destination
 registers, missing/extra retirements, and control-flow divergence alike and
 not just the accuracy of final answer.
 
-Multiple random seeds are used to exercise different instruction
+Regression runs multiple random seeds to exercise different instruction
 mixes and dependency patterns each time, including back-to-back dependent
 chains (forwarding) and load-immediately-followed-by-use (load-use stall).
 
@@ -107,19 +105,14 @@ Differential testing has been successfully run on randomized programs
 exceeding 10,000 instructions across multiple seeds, including programs
 designed to stress forwarding, load-use stalls, branches, and jumps.
 
-To generate and simulate a random test:
-
 ```bash
-python scripts/run_diff.py --seed 53 --count 10000
-```
-This performs the random program generation, compilation, conversion to the instruction memory format, RTL compilation, and RTL simulation.
-The Spike comparison is intentionally kept as a separate manual step. From WSL, navigate to the project directory on the Windows filesystem. Then run:
+Windows:
+python scripts/gen_random.py --seed <M> --count <N>
+python scripts/run_diff.py --seed <M> --count <N>
 
-```bash
-python3 diff/scripts/compare.py
+WSL:
+python compare.py
 ```
-
-If the executions diverge, compare.py reports the first mismatching retired instruction, making the failure directly traceable to a specific PC, instruction, register, or value.
 
 ---
 
@@ -137,9 +130,9 @@ If the executions diverge, compare.py reports the first mismatching retired inst
 
 ```
 rtl/          Processor RTL
-tb/           Testbenches for directed and official tests
+tb/           All testbenches
 scripts/      Build, generation, and regression python scripts
-diff/         Differential-testing harness (Testbench, Spike compare, traces, build artifacts)
+diff/         Differential-testing harness (Spike compare, traces, build artifacts)
 linker.ld     Linker script for assembly tests
 ```
 
