@@ -68,9 +68,9 @@ python scripts/rv.py run riscv-tests/isa/rv32ui/<test_name>.S
 python scripts/rv.py regress   # full suite
 ```
 
-**Currently passing (37/39):** `add addi and andi auipc beq bge bgeu blt
-bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh sll slli slt slti
-sltiu sltu sra srai srl srli sub sw xor xori`
+**Currently passing (40/42):** `add addi and andi auipc beq bge bgeu blt
+bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh simple sll slli slt slti
+sltiu sltu sra srai srl srli st_ld sub sw xor xori`
 
 **Intentionally excluded:** `fence_i` and `ma_data`. This core does not implement
 `FENCE.I` or misaligned memory access. These are scope decisions, not latent
