@@ -1,5 +1,6 @@
 module CPU #(
-    parameter IMEM_FILE = "instructions.hex"
+    parameter IMEM_FILE = "instructions.hex",
+    parameter DMEM_FILE = IMEM_FILE
 )(
     input clk,
     input reset,
@@ -381,7 +382,9 @@ module CPU #(
     //MEM Stage
     wire [31:0] mem_ReadData;
     
-    DataMemory data_memory (
+    DataMemory #(
+        .FILENAME(DMEM_FILE)
+    ) data_memory (
         .clk(clk),
         .we(mem_MemWrite),
         .MemRead(mem_MemRead),

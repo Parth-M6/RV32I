@@ -52,8 +52,8 @@ module tb_cpu_diff;
 
             cycles = cycles + 1;
 
-            //Ignore bubbles/NOPs inserted by the pipeline
-            if (dut.wb_instruction !== 32'h00000013) begin
+            // Ignore bubbles inserted by the pipeline (bubbles have PC = 0)
+            if (dut.wb_pc >= 32'h80000000) begin
 
                 if (dut.wb_RegWrite && (dut.wb_rd != 0)) begin
 
@@ -81,6 +81,9 @@ module tb_cpu_diff;
 
             // Completion marker: addi x31, x0, 0x55 (0x05500f93)
             if (dut.wb_instruction === 32'h05500f93) begin
+
+                @(posedge clk);
+                cycles = cycles + 1;  // The testbench logs writeback @(negedge clk). When addi x31, x0, 0x55 entered the Writeback stage on the rising clock edge, the testbench immediately printed the cycle count and called $finish on the subsequent negative clock edge, before the 48th full clock cycle had completed its retirement phase. Hence the increment
 
                 $display("");
                 $display("========================================");

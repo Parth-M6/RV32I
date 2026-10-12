@@ -1,17 +1,20 @@
 `timescale 1ns/1ps
 
-/*  5-stage pipelined RV32I CPU directed-test.
+/*  5-stage pipelined RV32I CPU directed-test testbench.
 
- Termination conditions (checked on WB retirement):
-  1. Sentinel instruction 0x00000400 retires = PASS  (directed tests)
-  2. ecall (0x00000073) retires with a0==0 = PASS  (C/official convention)
-  3. ecall retires with a0!=0 = FAIL
-  4. Cycle budget exceeded = TIMEOUT
- Test tracking: gp (x3) encodes the currently running sub-test number.
- The testbench prints [PASS]/[RUN] each time gp changes.
+  Termination conditions (checked on WB retirement):
+   1. Sentinel instruction 0x00000400 retires = PASS  (directed tests)
+   2. ecall (0x00000073) retires with a0==0 = PASS  (C/official convention)
+   3. ecall retires with a0!=0 = FAIL
+   4. Cycle budget exceeded = TIMEOUT
+  Test tracking: gp (x3) encodes the currently running sub-test number.
+  The testbench prints [PASS]/[RUN] each time gp changes.
 */
 
-module tb_cpu_custom;
+module tb_cpu_directed #(
+    parameter IMEM_FILE = "tests/artifacts/instructions.hex",
+    parameter DMEM_FILE = IMEM_FILE
+);
 
     reg clk;
     reg reset;
@@ -23,28 +26,29 @@ module tb_cpu_custom;
     wire [31:0] wb_instruction;
     wire [31:0] wb_pc;
 
-    CPU dut (
+    CPU #(
+        .IMEM_FILE(IMEM_FILE),
+        .DMEM_FILE(DMEM_FILE)
+    ) dut (
         .clk(clk),
         .reset(reset),
         .wb_instruction(wb_instruction),
         .wb_pc(wb_pc)
     );
 
-    //clock
+    // Clock generator (100MHz, 10ns period)
     initial begin
         clk = 0;
         forever #5 clk = ~clk;
     end
 
-
-    //Wave dump
+    // Wave dump
     initial begin
-        $dumpfile("tb_cpu_custom.vcd");
-        $dumpvars(0, tb_cpu_custom);
+        $dumpfile("tests/artifacts/tb_cpu_directed.vcd");
+        $dumpvars(0, tb_cpu_directed);
     end
 
-
-    //Full register + pipeline-state dump task
+    // Full register + pipeline-state dump task
     task dump_registers;
         begin
             $display("\n==============================");
@@ -77,21 +81,20 @@ module tb_cpu_custom;
         end
     endtask
 
-
-    //Simulation
+    // Simulation
     initial begin
         cycles    = 0;
-        last_test = -1;
+        last_test = 0;
         reset     = 1;
 
         repeat (2) @(posedge clk);
         reset = 0;
 
         forever begin
-            @(posedge clk);
+            @(negedge clk);
             cycles = cycles + 1;
 
-            //Sub-test progress tracking via gp(x3)
+            // Sub-test progress tracking via gp (x3)
             if (dut.register_file.registers[3] != 0) begin
                 if (dut.register_file.registers[3] !== last_test) begin
                     if (last_test > 0)
@@ -101,8 +104,8 @@ module tb_cpu_custom;
                 end
             end
 
-            //TERMINATION: custom sentinel 0x00000400 retires
-            if (wb_instruction == 32'h00000400) begin
+            // TERMINATION: custom sentinel 0x00000400 retires
+            if (wb_instruction == 32'h00000400 && wb_pc >= 32'h80000000) begin
                 if (last_test > 0)
                     $display("[PASS] sub-test %0d  (cycle=%0d)", last_test, cycles);
                 $display("\n========================================");
@@ -112,8 +115,8 @@ module tb_cpu_custom;
                 $finish;
             end
 
-            //TERMINATION: ecall(riscv-tests/C program convention)
-            if (wb_instruction == 32'h00000073) begin
+            // TERMINATION: ecall (riscv-tests/C program convention)
+            if (wb_instruction == 32'h00000073 && wb_pc >= 32'h80000000) begin
                 if (dut.register_file.registers[10] == 0) begin
                     if (last_test > 0)
                         $display("[PASS] sub-test %0d  (cycle=%0d)", last_test, cycles);
@@ -121,6 +124,7 @@ module tb_cpu_custom;
                     $display("  RV32I TEST PASSED  (cycles=%0d)", cycles);
                     $display("========================================\n");
                 end else begin
+                    $display("[FAIL] sub-test %0d  (cycle=%0d)", dut.register_file.registers[10], cycles);
                     $display("\n========================================");
                     $display("  RV32I TEST FAILED  (a0=%0d)", dut.register_file.registers[10]);
                     $display("========================================\n");
@@ -130,7 +134,7 @@ module tb_cpu_custom;
                 $finish;
             end
 
-            //TIMEOUT
+            // TIMEOUT
             if (cycles > 100000) begin
                 $display("\n========================================");
                 $display("  TIMEOUT  (last sub-test entered: %0d)", last_test);

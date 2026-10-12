@@ -28,35 +28,71 @@ verification stack built around differential testing against
 
 ## Verification
 
-Correctness is checked in two tiers: self-checking directed/official tests
+Correctness is checked in two tiers: self-checking (directed & official) tests
 that assert their own outcome, and randomized differential testing that
 checks every retired instruction against Spike.
 
-### Layer 1: Directed & official tests
+### Layer 1: Directed Tests
 
-`tb/directed_tests.S` is a 30-subtest, hand-written, self-checking program.
-Each subtest sets `gp` to its test number, runs a sequence, and branches to
-a fail path (writes the test number to `a0`, `ecall`s) if the result is
-wrong.
+The first layer of testing uses a custom assembly program, `tests/directed_tests.S`, to verify the correctness of the RV32I CPU. It contains **50 directed subtests**, covering individual instructions as well as situations where multiple instructions interact with each other in the pipeline.
 
-| Tests | Coverage |
-|-------|----------|
-| 1–5   | ADD, SUB, overflow, LUI/AUIPC |
-| 6–12  | AND, OR, XOR, SLL, SRL, SRA, shift-immediate |
-| 13    | SLTI, SLTIU |
-| 14–16 | SW/LW, SB/LB/LBU, SH/LH/LHU (sign vs. zero extension) |
-| 17–20 | BEQ, BNE, BLT/BGE, BLTU/BGEU (taken + not-taken) |
-| 21–23 | JAL, JALR, nested call + return |
-| 24–25 | Load-use hazard stall, forwarding chain (tested explicitly, not left to chance) |
-| 26–28 | ANDI/ORI/XORI, SLT, SLTU |
-| 29–30 | Cross-granularity load, branch loop stress |
+These tests target specific cases that are easy to get wrong when implementing a pipelined processor. Each subtest checks its result against an expected value and reports a failure code if the check fails.
 
-Compilation and simulation executed using Icarus.
+#### What is covered?
 
-`tb_cpu_custom` tracks `gp` (x3) as the sub-test number and prints
-`[PASS]`/`[RUN]` for each. It terminates on **either** the custom
-`0x00000400` sentinel (directed/random programs) **or** an `ecall` with
-`a0==0` (C/official convention), so it works with both flows.
+| Test range | Coverage |
+|---|---|
+| 1–5 | Basic arithmetic, subtraction, two's complement, 32-bit overflow behaviour, and immediate arithmetic |
+| 6–8 | Bitwise operations: AND, OR, and XOR, including their immediate variants |
+| 9–11 | Logical and arithmetic shifts, including register-based and immediate shift instructions |
+| 12–13 | Signed and unsigned comparisons using SLT, SLTI, SLTU, and SLTIU |
+| 14–16 | LUI, AUIPC, PC-relative addressing, JAL, and AUIPC/JALR sequences |
+| 17–23 | Byte, halfword, and word loads/stores; sign extension; zero extension; little-endian memory layout; and negative offsets |
+| 24–27 | Conditional branches, covering both taken and not-taken paths and signed versus unsigned comparisons |
+| 28–30 | JAL/JALR jump targets, link addresses, non-zero offsets, and JALR's clearing of the target address's least significant bit |
+| 31–33 | Data forwarding between dependent instructions |
+| 34–39 | Load-use hazards, branch dependencies, load-to-store forwarding, dependent store addresses, store-data forwarding, and store/load consistency |
+| 40–41 | Pipeline flushing after branches and jumps, including preventing a flushed store from modifying memory |
+| 42 | Register `x0` remaining zero, even when instructions attempt to write to it or forwarding is involved |
+| 43–45 | Branch predictor behaviour across repeated outcomes, alternating branch outcomes, and consecutive branch/jump sequences |
+| 46–47 | Forwarding into branch comparisons and handling a JALR base-register dependency |
+| 48–50 | Shift amounts using the lower five bits, byte-lane isolation, and back-to-back loads followed by dependent ALU operations |
+
+The tests are intended to exercise both the RV32I instruction implementation and the additional control logic required to keep a five-stage pipeline working correctly.
+
+#### How the test program reports results
+
+The assembly program uses the `gp` register to identify the current subtest. When a check fails, the program places the corresponding test number in `a0` and executes an `ecall`. This gives the testbench a failure code that can be used to identify the failing subtest.
+
+If all checks complete successfully, the program sets `a0` to zero, emits a custom `0x00000400` instruction as a success marker, and then executes an `ecall` as a fallback termination mechanism.
+
+The testbench monitors instructions retiring from the write-back stage to detect these termination conditions. It reports a successful run when it observes the success marker or a successful terminating `ecall`. A non-zero failure code indicates that a test failed, while exceeding the cycle limit results in a timeout.
+
+The testbench also prints test progress as `gp` changes, generates a VCD waveform file for debugging, and dumps the final register state and relevant pipeline signals. This makes it easier to investigate failures involving forwarding, stalls, branch decisions, or incorrect flush behaviour.
+
+#### Building and running the tests
+
+The directed test program is assembled and linked using the RISC-V GCC toolchain. The resulting ELF file is converted into a binary, which is then converted into the instruction-memory hex format expected by the testbench. Finally, Icarus Verilog compiles the RTL and testbench, and the resulting simulation is run with `vvp`.
+
+Run the following commands from the project root:
+
+```powershell
+riscv-none-elf-gcc -march=rv32i -mabi=ilp32 -nostdlib -nostartfiles -T linker.ld -o tests\artifacts\directed_tests.elf tests\directed_tests.S
+
+riscv-none-elf-objcopy -O binary -j .text tests\artifacts\directed_tests.elf tests\artifacts\directed_tests.bin
+
+python diff\scripts\bin_to_hex.py tests\artifacts\directed_tests.bin tests\artifacts\instructions.hex
+
+iverilog -g2012 -o tests\artifacts\directed_tests.vvp rtl\*.v tb\tb_cpu_directed.v
+
+vvp tests\artifacts\directed_tests.vvp
+```
+
+The simulation prints the test progress and final result to the console. It also generates `tb_cpu_directed.vcd`, which can be opened in a waveform viewer to inspect the pipeline when debugging a failure.
+
+**Note:** The per-test `[PASS]` messages are based on the testbench observing the `gp` register advance to the next test. The final success marker or successful terminating `ecall` is the stronger indication that the complete test program finished successfully.
+
+**CAUTION:** `tests/artifacts` directory is created to store the artifacts created by the directed tests. It contains the ELF file, the binary file, the hex file, and the VCD file. All files in the directory must be deleted before running/rerunning the tests or after modifications in tests otherwise it will reuse the previously generated .elf file giving unintended results.
 
 Separately, `tb_cpu_official` runs the official
 [riscv-tests](https://github.com/riscv-software-src/riscv-tests) RV32UI
@@ -68,13 +104,12 @@ python scripts/rv.py run riscv-tests/isa/rv32ui/<test_name>.S
 python scripts/rv.py regress   # full suite
 ```
 
-**Currently passing (40/42):** `add addi and andi auipc beq bge bgeu blt
-bltu bne jal jalr lb lbu ld_st lh lhu lui lw or ori sb sh simple sll slli slt slti
+**Currently passing (41/42):** `add addi and andi auipc beq bge bgeu blt
+bltu bne jal jalr lb lbu ld_st lh lhu lui lw ma_data or ori sb sh simple sll slli slt slti
 sltiu sltu sra srai srl srli st_ld sub sw xor xori`
 
-**Intentionally excluded:** `fence_i` and `ma_data`. This core does not implement
-`FENCE.I` or misaligned memory access. These are scope decisions, not latent
-bugs.The implemented RV32I instruction subset is fully verified; FENCE/FENCE.I and misaligned memory access are currently outside the implementation scope.
+**Intentionally excluded:** `fence_i`. This core does not implement
+`FENCE.I`. The implemented RV32I instruction subset is fully verified; FENCE/FENCE.I is currently outside the implementation scope.
 
 ### Layer 2: Random differential testing against Spike
 
@@ -106,14 +141,14 @@ exceeding 10,000 instructions across multiple seeds, including programs
 designed to stress forwarding, load-use stalls, branches, and jumps.
 
 ```bash
-Windows:
-python scripts/gen_random.py --seed <M> --count <N>
-python scripts/run_diff.py --seed <M> --count <N>
+Windows/Linux:
+python scripts/gen_random.py --seed <M> --count <N>  # Generates a random RV32I program
+python scripts/run_diff.py --seed <M> --count <N> # auto executes gen_random.py script with same parameters
 
-WSL:
+WSL/Linux:
 python compare.py
 ```
-
+**NOTE:** Update the Spike installation path in `_cands` (Line 7 & 8 in `diff/scripts/compare.py`) to match the directory where Spike is installed on your system.
 ---
 
 ## Toolchain
@@ -129,10 +164,11 @@ python compare.py
 ## Repository structure
 
 ```
-rtl/          Processor RTL
-tb/           All testbenches
-scripts/      Build, generation, and regression python scripts
 diff/         Differential-testing harness (Spike compare, traces, build artifacts)
+rtl/          Processor RTL
+scripts/      Build, generation, and regression python scripts (for both official tests and spike)
+tb/           All testbenches
+tests/        Directed tests and artifacts
 linker.ld     Linker script for assembly tests
 ```
 
@@ -146,8 +182,8 @@ linker.ld     Linker script for assembly tests
 | 5-Stage Pipelined Datapath | ✅ |
 | Hazard Forwarding & Stalls | ✅ |
 | Dynamic Branch Predictor (2-bit + BTB) | ✅ |
-| Directed Tests (30 subtests) | ✅ |
-| Official riscv-tests RV32UI | ✅ (40/42, `fence_i` and `ma_data` excluded by design) |
+| Directed Tests (50 subtests) | ✅ |
+| Official riscv-tests RV32UI | ✅ (41/42, `fence_i` excluded by design) |
 | Randomized RV32I Testing | ✅ |
 | Long-trace testing (>10,000 instr.) | ✅ |
 | Synthesizable RTL | ✅ |
@@ -159,7 +195,6 @@ linker.ld     Linker script for assembly tests
 - Run C programs compiled with GCC
 - Implement the M extension (`MUL`/`DIV`)
 - Implement FENCE/FENCE.I
-- Add misaligned memory access support
 - Implement CSR instructions
 - Add performance counters and CPI measurements
 - FPGA implementation

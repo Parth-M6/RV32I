@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""gen_random.py - write a random RV32I program to diff/build/random_prog.S (nothing else).
+"""gen_random.py - write a random RV32I program to diff/build/random_prog.S
 
   python scripts/gen_random.py --seed N --count M
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 REGS = [f"x{i}" for i in range(5, 29)]
 LABEL_GAP = 4      # chunks between labels
-NEAR_LABELS = 2    # jump targets: the next N labels
+NEAR_LABELS = 5    # jump targets: the next N labels
 DATA_ADDRS = [0x2000 + i * 4 for i in range(32)]  # valid in RTL and in Spike's -m0x2000:0x1000
 _labels = itertools.count(100)                    # unique numeric labels for auipc/jalr pairs
 
