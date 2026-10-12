@@ -35,7 +35,7 @@ def main():
     gen = [sys.executable, ROOT / "scripts" / "gen_random.py", "--count", a.count]
     run(gen + (["--seed", a.seed] if a.seed is not None else []))
     run(["riscv-none-elf-gcc", "-march=rv32i", "-mabi=ilp32", "-nostdlib", "-nostartfiles",
-         "-T", D / "tests" / "link.ld", "-o", ELF, D / "build" / "random_prog.S"])
+         "-T", ROOT / "linker.ld", "-o", ELF, D / "build" / "random_prog.S"])
     run(["riscv-none-elf-objcopy", "-O", "binary", "-j", ".text", ELF, BIN])
     run([sys.executable, D / "scripts" / "bin_to_hex.py", BIN, HEX])
     run(["iverilog", "-g2012", "-o", VVP, *sorted((ROOT / "rtl").glob("*.v")), TB])

@@ -24,3 +24,16 @@ Desktop.ini
 # Official tests
 riscv-tests/
 
+# Differential Artifacts
+diff/tests/random50.bin
+diff/tests/random50.elf
+
+diff/rtl/rtl_trace.log
+diff/rtl/diff.vvp
+diff/rtl/instructions.hex
+
+spike.log
+
+# Directed Tests Artifacts
+tests/artifacts
+run_directed.ps1

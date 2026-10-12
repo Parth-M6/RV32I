@@ -1,4 +1,7 @@
-module DataMemory #(parameter [31:0] DEPTH = 16384) (
+module DataMemory #(
+    parameter [31:0] DEPTH = 16384,
+    parameter FILENAME = "instructions.hex"
+) (
     input clk,
     input we,
     input MemRead,
@@ -17,7 +20,7 @@ module DataMemory #(parameter [31:0] DEPTH = 16384) (
     initial begin
         for (i = 0; i < DEPTH; i = i + 1)
             memory[i] = 32'd0; //clear first (catches X propagation)
-        $readmemh("instructions.hex", memory);
+        $readmemh(FILENAME, memory);
     end
 
     //Simulation assertions
