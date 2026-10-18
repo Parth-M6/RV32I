@@ -122,7 +122,7 @@ def main():
     seed = a.seed if a.seed is not None else int(time.time() * 1000) % (2**31)
     out = Path(__file__).resolve().parent.parent / "diff" / "build" / "random_prog.S"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build_program(a.count, seed))
+    out.write_text(build_program(a.count, seed), encoding="utf-8")
     print(f"seed={seed} count={a.count} -> {out}")
 
 
