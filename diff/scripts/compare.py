@@ -1,12 +1,28 @@
-import os, re, select, shutil, subprocess, sys
+import os, queue, re, shutil, subprocess, sys, threading
 
 SPIKE_BASE, END_INSN = 0x80000000, 0x05500F93
-ELF = os.environ.get("DIFF_ELF", "diff/tests/random50.elf")
+ELF = os.environ.get("DIFF_ELF", "diff/tests/random.elf")
 RTL_TRACE = os.environ.get("DIFF_RTL_LOG", "diff/rtl/rtl_trace.log")
 
-_cands = [os.environ.get("SPIKE_BIN"), "spike", os.path.expanduser("~/spike-install/bin/spike"),
-          "/home/parth/spike-install/bin/spike"]
-SPIKE_BIN = next((p for p in _cands if p and shutil.which(p)), "spike")
+
+def find_spike():
+    cands = [os.environ.get("SPIKE_BIN"), "spike", os.path.expanduser("~/spike-install/bin/spike"),
+             "/home/parth/spike-install/bin/spike"]
+    for p in cands:
+        if p and shutil.which(p):
+            return [p]
+    if os.name == "nt" and shutil.which("wsl"):
+        wsl_cands = [os.environ.get("SPIKE_BIN"), "spike", "~/spike-install/bin/spike",
+                     "/home/parth/spike-install/bin/spike"]
+        for c in wsl_cands:
+            if not c:
+                continue
+            res = subprocess.run(["wsl", "sh", "-c", f"command -v {c} || [ -x {c} ]"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode == 0:
+                return ["wsl", c]
+    return ["spike"]
+
 
 # Spike --log-commits lines:  core   0: 3 0x80000000 (0x00100293) x5  0x00000001
 # stores have no rd; loads append "mem 0xADDR" after the value (must not be captured as the value).
@@ -17,16 +33,33 @@ BAR = "=" * 40
 
 def run_spike():
     # 4 KB at 0x2000 covers the data addresses (Spike's boot ROM owns [0, 0x2000)); keep the default 2 GB at 0x80000000.
-    cmd = [SPIKE_BIN, "--isa=RV32I", "--log-commits", "-m0x2000:0x1000,0x80000000:0x80000000", ELF]
+    spike_cmd = find_spike()
+    elf_arg = str(ELF).replace("\\", "/")
+    cmd = [*spike_cmd, "--isa=RV32I", "--log-commits", "-m0x2000:0x1000,0x80000000:0x80000000", elf_arg]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    q = queue.Queue()
+
+    def enqueue_output(out, q):
+        try:
+            for line in iter(out.readline, ''):
+                q.put(line)
+        except Exception:
+            pass
+        finally:
+            out.close()
+
+    t = threading.Thread(target=enqueue_output, args=(p.stdout, q), daemon=True)
+    t.start()
+
     lines = []
     try:
         while True:
-            if not select.select([p.stdout], [], [], 30)[0]:
+            try:
+                line = q.get(timeout=30)
+            except queue.Empty:
                 print("WARNING: Spike produced no output for 30 s — likely hung in "
                       "a trap handler (misaligned access / illegal instruction).")
                 break
-            line = p.stdout.readline()
             if not line:
                 break
             lines.append(line)
@@ -55,7 +88,7 @@ def parse_spike(output):
 
 def parse_rtl():
     trace = []
-    with open(RTL_TRACE) as f:
+    with open(RTL_TRACE, encoding="utf-8") as f:
         for line in f:
             p = line.split()
             if len(p) != 4:

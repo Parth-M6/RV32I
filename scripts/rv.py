@@ -12,12 +12,33 @@ import argparse, os, re, shutil, struct, subprocess as sp, sys, time
 from collections import namedtuple
 from pathlib import Path
 
-if os.name == "nt":  # make the Windows RISC-V toolchain visible
-    _p = r"C:\riscv-gnu\bin"
-    if os.path.exists(_p) and _p.lower() not in os.environ.get("PATH", "").lower():
-        os.environ["PATH"] = _p + os.pathsep + os.environ.get("PATH", "")
+def setup_toolchain():
+    """Ensure RISC-V toolchain directory is visible on PATH."""
+    for env_k in ("RISCV_PATH", "RISCV_GNU_PATH", "RISCV_TOOLCHAIN_PATH"):
+        if env_v := os.environ.get(env_k):
+            bin_dir = os.path.join(env_v, "bin") if not env_v.endswith("bin") and os.path.exists(os.path.join(env_v, "bin")) else env_v
+            if os.path.exists(bin_dir) and bin_dir.lower() not in os.environ.get("PATH", "").lower():
+                os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+    if os.name == "nt":  # default Windows RISC-V toolchain fallback path
+        _p = r"C:\riscv-gnu\bin"
+        if os.path.exists(_p) and _p.lower() not in os.environ.get("PATH", "").lower():
+            os.environ["PATH"] = _p + os.pathsep + os.environ.get("PATH", "")
 
-PREFIX, MARCH, MABI = "riscv-none-elf-", "rv32i_zicsr", "ilp32"
+
+def find_toolchain_prefix(explicit=None):
+    """Find the RISC-V GCC toolchain prefix (e.g. riscv-none-elf-, riscv64-unknown-elf-)."""
+    if explicit:
+        return explicit if explicit.endswith("-") else f"{explicit}-"
+    if env_p := os.environ.get("RISCV_PREFIX"):
+        return env_p if env_p.endswith("-") else f"{env_p}-"
+    for cand in ("riscv-none-elf-", "riscv64-unknown-elf-", "riscv32-unknown-elf-", "riscv64-elf-", "riscv32-elf-"):
+        if shutil.which(f"{cand}gcc"):
+            return cand
+    return "riscv-none-elf-"
+
+
+setup_toolchain()
+PREFIX, MARCH, MABI = find_toolchain_prefix(), "rv32i_zicsr", "ilp32"
 HEX_NAME, MAX_CYCLES, SIM_TIMEOUT = "instructions.hex", 10000, 30
 
 
@@ -82,7 +103,7 @@ def build_one(root, source, *, march=MARCH, mabi=MABI, fmt="words", dis=True, ou
         sh(PREFIX + "objcopy", "-O", "binary", elf, tmp)
         d = tmp.read_bytes()
         d += b"\0" * (-len(d) % 4)
-        hx.write_text("".join(f"{w:08x}\n" for w in struct.unpack(f"<{len(d) // 4}I", d)))
+        hx.write_text("".join(f"{w:08x}\n" for w in struct.unpack(f"<{len(d) // 4}I", d)), encoding="utf-8")
         tmp.unlink()
     else:  # native "-O verilog" (@addr annotated)
         sh(PREFIX + "objcopy", "-O", "verilog", elf, hx)
@@ -91,7 +112,7 @@ def build_one(root, source, *, march=MARCH, mabi=MABI, fmt="words", dis=True, ou
     if dis:
         say("objdump -> .dis")
         dp = root / "build" / f"{name}.dis"
-        with open(dp, "w") as f:
+        with open(dp, "w", encoding="utf-8") as f:
             sh(PREFIX + "objdump", "-d", elf, stdout=f)
 
     say(f"copy -> rtl/{HEX_NAME}")
@@ -116,10 +137,16 @@ def run_sim(root, vvp, log, timeout=None):
         out = e.output or ""
         if isinstance(out, bytes):
             out = out.decode(errors="replace")
-        out += f"\n[watchdog] process exceeded {t}s and was killed"
-    log.write_text(out)
+    log.write_text(out, encoding="utf-8")
     for v in rtl.glob("*.vcd"):
-        v.replace(root / "waves" / v.name)
+        dest = root / "waves" / v.name
+        try:
+            dest.unlink(missing_ok=True)   # remove stale copy
+            v.replace(dest)
+        except OSError:
+            shutil.copy2(v, dest)          # fallback: copy if rename still races
+            try: v.unlink()
+            except OSError: pass
     return out
 
 
@@ -194,6 +221,7 @@ def main(argv=None):
         p.set_defaults(fn=fn)
         p.add_argument("--root")
         p.add_argument("--format", choices=["words", "verilog"], default="words")
+        p.add_argument("--prefix", default=None, help="RISC-V toolchain prefix (e.g. riscv-none-elf-, riscv64-unknown-elf-)")
         if src:
             p.add_argument("source")
         if name != "build":
@@ -213,6 +241,9 @@ def main(argv=None):
     g.add_argument("--stop-on-fail", action="store_true")
 
     a = ap.parse_args(argv)
+    if getattr(a, "prefix", None):
+        global PREFIX
+        PREFIX = find_toolchain_prefix(a.prefix)
     root = find_root(a.root)
     if a.cmd != "regress":
         print(info(f"project root: {root}"))

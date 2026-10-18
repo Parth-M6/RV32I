@@ -10,7 +10,7 @@ with open(input_file, "rb") as f:
 while len(data) % 4:
     data += b"\x00"
 
-with open(output_file, "w") as f:
+with open(output_file, "w", encoding="utf-8") as f:
     for i in range(0, len(data), 4):
         word = int.from_bytes(data[i:i+4], byteorder="little")
         f.write(f"{word:08x}\n")
